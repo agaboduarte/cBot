@@ -47,9 +47,6 @@ namespace cAlgo
         [Parameter("Quantity (Lots)", DefaultValue = 0.15, MinValue = 0.01, Step = 0.01)]
         public double Quantity { get; set; }
 
-        [Parameter("Use Small Quantity On Stop Loss", DefaultValue = false)]
-        public bool UseSmallQuantityOnStopLoss { get; set; }
-
         [Parameter("Stop Loss Pips", DefaultValue = 45, MinValue = 1)]
         public double StopLossPips { get; set; }
 
