@@ -21,48 +21,39 @@ using cAlgo.Indicators;
 namespace cAlgo
 {
     [Robot(TimeZone = TimeZones.UTC, AccessRights = AccessRights.None)]
-    public class MyBot : Robot
+    public class cBot : Robot
     {
         private RelativeStrengthIndex rsi;
         private const string label = "trend-cBot";
-        private object lockCreateOrder = new object();
         private double totalStopLossToday = 0;
         private DateTime lastTime;
         private TimeSpan fridayCloseAllOrdersUpTo = new TimeSpan(20, 0, 0);
-        private double stopLossMovableLastPips = 0;
-        private int martingaleVariant = 1;
+        private int martingaleMultiplication = 1;
+        private double movableStopLossLastPips = 0;
+        private double movableStopLossForwardPips = 0;
 
-        [Parameter("DataSeries")]
-        public DataSeries Series { get; set; }
+        [Parameter("RSI Periods", DefaultValue = 14, MinValue = 1, Step = 1)]
+        public int RSILongPeriods { get; set; }
 
-        [Parameter("RSI Periods", DefaultValue = 14, MinValue = 1)]
-        public int RSIPeriods { get; set; }
+        [Parameter("RSI Line Maximum", DefaultValue = 80, MinValue = 0, MaxValue = 100, Step = 1)]
+        public int RSILineHigh { get; set; }
 
-        [Parameter("RSI Line Maximum", DefaultValue = 80, MinValue = 0, MaxValue = 100)]
-        public int RSILineMaximum { get; set; }
-
-        [Parameter("RSI Line Minimum", DefaultValue = 20, MinValue = 0, MaxValue = 100)]
-        public int RSILineMinimum { get; set; }
+        [Parameter("RSI Line Minimum", DefaultValue = 20, MinValue = 0, MaxValue = 100, Step = 1)]
+        public int RSILineLow { get; set; }
 
         [Parameter("Quantity (Lots)", DefaultValue = 0.15, MinValue = 0.01, Step = 0.01)]
-        public double Quantity { get; set; }
+        public double Lots { get; set; }
 
-        [Parameter("Stop Loss Pips", DefaultValue = 45, MinValue = 1)]
+        [Parameter("Stop Loss Pips", DefaultValue = 45, MinValue = 1, Step = 0.01)]
         public double StopLossPips { get; set; }
 
-        [Parameter("Stop Loss Movable Pips", DefaultValue = 0, MinValue = 0)]
-        public double StopLossMovablePips { get; set; }
+        [Parameter("Movable Stop Loss Pips", DefaultValue = 0.5, MinValue = 0, Step = 0.01)]
+        public double MovableStopLossPips { get; set; }
 
-        [Parameter("Take Profit Pips", DefaultValue = 135, MinValue = 0)]
+        [Parameter("Take Profit Pips", DefaultValue = 0, MinValue = 0, Step = 0.01)]
         public double TakeProfitPips { get; set; }
 
-        [Parameter("Breakeven Strategy", DefaultValue = true)]
-        public bool BreakevenStrategy { get; set; }
-
-        [Parameter("Breakeven Pips", DefaultValue = 2, MinValue = 0)]
-        public double BreakevenPips { get; set; }
-
-        [Parameter("Max Stop Loss Per Day ($)", DefaultValue = 200, MinValue = 0)]
+        [Parameter("Max Stop Loss Per Day ($)", DefaultValue = 200, MinValue = 0, Step = 10.0)]
         public double MaxStopLossPerDay { get; set; }
 
         [Parameter("Use Martingale", DefaultValue = false)]
@@ -70,17 +61,17 @@ namespace cAlgo
 
         private bool RisingSignal
         {
-            get { return rsi.Result.Minimum(RSIPeriods) <= RSILineMinimum && rsi.Result.LastValue <= RSILineMinimum && rsi.Result.IsRising(); }
+            get { return rsi.Result.Minimum(RSILongPeriods) <= RSILineLow && rsi.Result.LastValue <= RSILineLow && rsi.Result.IsRising(); }
         }
 
         private bool FallingSignal
         {
-            get { return rsi.Result.Maximum(RSIPeriods) >= RSILineMaximum && rsi.Result.LastValue >= RSILineMaximum && rsi.Result.IsFalling(); }
+            get { return rsi.Result.Maximum(RSILongPeriods) >= RSILineHigh && rsi.Result.LastValue >= RSILineHigh && rsi.Result.IsFalling(); }
         }
 
         private long QuantityVolumeInUnits
         {
-            get { return Symbol.QuantityToVolume(Quantity); }
+            get { return Symbol.QuantityToVolume(Lots); }
         }
 
         private bool RiskTime
@@ -95,14 +86,14 @@ namespace cAlgo
 
         private bool IsMovableStopLoss
         {
-            get { return StopLossMovablePips > 0; }
+            get { return MovableStopLossPips > 0; }
         }
 
         protected override void OnStart()
         {
             Positions.Closed += OnClosePosition;
 
-            rsi = Indicators.RelativeStrengthIndex(Series, RSIPeriods);
+            rsi = Indicators.RelativeStrengthIndex(MarketSeries.Close, RSILongPeriods);
         }
 
         protected override void OnTick()
@@ -115,11 +106,11 @@ namespace cAlgo
 
             ClosingOrdersIfNecessary();
 
-            var trade = CreateOrders();
+            var tradeResult = CreateOrders();
 
             ModifyOpenPosition();
 
-            if (trade != null && trade.IsSuccessful)
+            if (tradeResult != null && tradeResult.IsSuccessful)
                 EndConfigureParameters();
         }
 
@@ -137,7 +128,7 @@ namespace cAlgo
             var tradeResult = default(TradeResult);
             var buyPosition = Positions.Find(label, Symbol, TradeType.Buy);
             var sellPosition = Positions.Find(label, Symbol, TradeType.Sell);
-            var volume = QuantityVolumeInUnits * martingaleVariant;
+            var volume = QuantityVolumeInUnits * martingaleMultiplication;
 
             if (CanOpenOrder && tradeResult == null)
             {
@@ -178,36 +169,21 @@ namespace cAlgo
             if (position == null)
                 return;
 
-            var breakevenValue = BreakevenPips * Symbol.PipValue;
-            var stopLossValue = StopLossMovablePips * Symbol.PipValue;
-            var takeProfitValue = TakeProfitPips * Symbol.PipValue;
+            if (position.Pips > movableStopLossLastPips)
+                movableStopLossLastPips = position.Pips;
 
-            var isBreakevenPoint = position.Pips >= StopLossPips;
-            var takeProfit = default(double?);
-            var stopLoss = position.StopLoss.Value;
+            var setStopLoss = GetAbsoluteStopLoss(position, StopLossPips);
 
             if (IsMovableStopLoss)
-                stopLoss = position.TradeType == TradeType.Sell ? position.StopLoss.Value - stopLossValue : position.StopLoss.Value + stopLossValue;
-            else
-            {
-                if (isBreakevenPoint)
-                    stopLoss = position.TradeType == TradeType.Sell ? position.EntryPrice - breakevenValue : position.EntryPrice + breakevenValue;
+                setStopLoss = GetAbsoluteStopLoss(position, StopLossPips - movableStopLossLastPips);
 
-                takeProfit = position.TradeType == TradeType.Sell ? position.EntryPrice - takeProfitValue : position.EntryPrice + takeProfitValue;
-            }
-
-            var incrementMovableStopLoss = IsMovableStopLoss && position.Pips - stopLossMovableLastPips >= StopLossMovablePips;
-
-            if (BreakevenStrategy && isBreakevenPoint || incrementMovableStopLoss)
-                ModifyPosition(position, stopLoss, takeProfit);
-
-            if (position.Pips > stopLossMovableLastPips)
-                stopLossMovableLastPips = position.Pips;
+            if (position.StopLoss != setStopLoss)
+                ModifyPosition(position, setStopLoss, position.TakeProfit);
         }
 
         private void EndConfigureParameters()
         {
-            stopLossMovableLastPips = 0;
+            movableStopLossLastPips = 0;
         }
 
         private void OnClosePosition(PositionClosedEventArgs args)
@@ -220,10 +196,15 @@ namespace cAlgo
                 totalStopLossToday += Math.Abs(position.GrossProfit);
 
                 if (UseMartingale)
-                    martingaleVariant++;
+                    martingaleMultiplication++;
             }
             else
-                martingaleVariant = 1;
+                martingaleMultiplication = 1;
+        }
+
+        private double GetAbsoluteStopLoss(Position position, double stopLossInPips)
+        {
+            return position.TradeType == TradeType.Buy ? position.EntryPrice - Symbol.PipSize * stopLossInPips : position.EntryPrice + Symbol.PipSize * stopLossInPips;
         }
     }
 }
