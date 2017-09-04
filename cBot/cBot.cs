@@ -24,7 +24,7 @@ namespace cAlgo
     public class MyBot : Robot
     {
         private RelativeStrengthIndex rsi;
-        private const string label = "Sample Trend cBot";
+        private const string label = "trend-cBot";
         private object lockCreateOrder = new object();
         private double totalStopLossToday = 0;
         private DateTime lastTime;

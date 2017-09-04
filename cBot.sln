@@ -1,7 +1,9 @@
 ﻿
-Microsoft Visual Studio Solution File, Format Version 11.00
-# Visual Studio 2010
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "My Bot", "My Bot\My Bot.csproj", "{32FBD1DF-4635-4F16-9287-3CF4F9EB6280}"
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 2013
+VisualStudioVersion = 12.0.40629.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "cBot", "cBot\cBot.csproj", "{32FBD1DF-4635-4F16-9287-3CF4F9EB6280}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
