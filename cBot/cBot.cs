@@ -23,7 +23,7 @@ namespace cAlgo
     [Robot(TimeZone = TimeZones.UTC, AccessRights = AccessRights.None)]
     public class cBot : Robot
     {
-        private RelativeStrengthIndex rsi;
+        private RelativeStrengthIndex relativeStrengthIndex;
         private const string label = "trend-cBot";
         private double totalStopLossToday = 0;
         private DateTime lastTime;
@@ -32,23 +32,23 @@ namespace cAlgo
         private double movableStopLossLastPips = 0;
         private double movableStopLossForwardPips = 0;
 
-        [Parameter("RSI Periods", DefaultValue = 14, MinValue = 1, Step = 1)]
-        public int RSILongPeriods { get; set; }
+        [Parameter("Periods", DefaultValue = 14, MinValue = 1, Step = 1)]
+        public int Periods { get; set; }
 
-        [Parameter("RSI Line Maximum", DefaultValue = 80, MinValue = 0, MaxValue = 100, Step = 1)]
-        public int RSILineHigh { get; set; }
+        [Parameter("High Ceil", DefaultValue = 80, MinValue = 0, MaxValue = 100, Step = 1)]
+        public int HighCeil { get; set; }
 
-        [Parameter("RSI Line Minimum", DefaultValue = 20, MinValue = 0, MaxValue = 100, Step = 1)]
-        public int RSILineLow { get; set; }
+        [Parameter("Low Ceil", DefaultValue = 20, MinValue = 0, MaxValue = 100, Step = 1)]
+        public int LowCeil { get; set; }
 
         [Parameter("Quantity (Lots)", DefaultValue = 0.15, MinValue = 0.01, Step = 0.01)]
         public double Lots { get; set; }
 
-        [Parameter("Stop Loss Pips", DefaultValue = 35, MinValue = 1, Step = 0.01)]
-        public double StopLossPips { get; set; }
+        [Parameter("Stop Loss Pips", DefaultValue = 35, MinValue = 1)]
+        public int StopLossPips { get; set; }
 
-        [Parameter("Movable Stop Loss", DefaultValue = false)]
-        public bool MovableStopLoss { get; set; }
+        [Parameter("Trailing Stop", DefaultValue = false)]
+        public bool TrailingStopLoss { get; set; }
 
         [Parameter("Take Profit Pips", DefaultValue = 135, MinValue = 0, Step = 0.01)]
         public double TakeProfitPips { get; set; }
@@ -59,14 +59,24 @@ namespace cAlgo
         [Parameter("Martingale", DefaultValue = false)]
         public bool Martingale { get; set; }
 
-        private bool RisingSignal
+        private bool BuySignal
         {
-            get { return rsi.Result.Minimum(RSILongPeriods) <= RSILineLow && rsi.Result.LastValue <= RSILineLow && rsi.Result.IsRising(); }
+            get
+            {
+                var rsi = relativeStrengthIndex;
+
+                return rsi.Result.Last(1) < LowCeil && rsi.Result.IsRising() && rsi.Result.Sum(Periods) / Periods > LowCeil;
+            }
         }
 
-        private bool FallingSignal
+        private bool SellSignal
         {
-            get { return rsi.Result.Maximum(RSILongPeriods) >= RSILineHigh && rsi.Result.LastValue >= RSILineHigh && rsi.Result.IsFalling(); }
+            get
+            {
+                var rsi = relativeStrengthIndex;
+
+                return rsi.Result.Last(1) > HighCeil && rsi.Result.IsFalling() && rsi.Result.Sum(Periods) / Periods < HighCeil;
+            }
         }
 
         private long QuantityVolumeInUnits
@@ -88,7 +98,7 @@ namespace cAlgo
         {
             Positions.Closed += OnClosePosition;
 
-            rsi = Indicators.RelativeStrengthIndex(MarketSeries.Close, RSILongPeriods);
+            relativeStrengthIndex = Indicators.RelativeStrengthIndex(MarketSeries.Close, Periods);
         }
 
         protected override void OnTick()
@@ -100,22 +110,14 @@ namespace cAlgo
             }
 
             ClosingOrdersIfNecessary();
-
-            var tradeResult = CreateOrders();
-
+            CreateOrders();
             ModifyOpenPosition();
-
-            if (tradeResult != null && tradeResult.IsSuccessful)
-                EndConfigureParameters();
         }
 
         private void ClosingOrdersIfNecessary()
         {
             if (RiskTime)
-            {
-                foreach (var position in Positions.FindAll(label, Symbol))
-                    ClosePosition(position);
-            }
+                CloseAllPositions();
         }
 
         private TradeResult CreateOrders()
@@ -127,29 +129,35 @@ namespace cAlgo
 
             if (CanOpenOrder && tradeResult == null)
             {
-                if (RisingSignal && buyPosition == null)
+                if (BuySignal && buyPosition == null)
                 {
-                    foreach (var position in Positions.FindAll(label, Symbol, TradeType.Sell))
-                        ClosePosition(position);
+                    CloseAllPositions();
 
                     tradeResult = CreateOrder(TradeType.Buy, volume);
                 }
 
-                if (FallingSignal && sellPosition == null)
+                if (SellSignal && sellPosition == null)
                 {
-                    foreach (var position in Positions.FindAll(label, Symbol, TradeType.Buy))
-                        ClosePosition(position);
+                    CloseAllPositions();
 
                     tradeResult = CreateOrder(TradeType.Sell, volume);
                 }
             }
+
+            if (tradeResult != null)
+                movableStopLossLastPips = 0;
 
             return tradeResult;
         }
 
         private TradeResult CreateOrder(TradeType type, long volume)
         {
-            if (MovableStopLoss)
+            var position = Positions.Find(label, Symbol, type);
+
+            if (position != null)
+                return null;
+
+            if (TrailingStopLoss)
                 return ExecuteMarketOrder(type, Symbol, volume, label, StopLossPips, null);
 
             return ExecuteMarketOrder(type, Symbol, volume, label, StopLossPips, TakeProfitPips);
@@ -169,16 +177,11 @@ namespace cAlgo
 
             var setStopLoss = GetAbsoluteStopLoss(position, StopLossPips);
 
-            if (MovableStopLoss)
+            if (TrailingStopLoss)
                 setStopLoss = GetAbsoluteStopLoss(position, StopLossPips - movableStopLossLastPips);
 
             if (position.StopLoss != setStopLoss)
                 ModifyPosition(position, setStopLoss, position.TakeProfit);
-        }
-
-        private void EndConfigureParameters()
-        {
-            movableStopLossLastPips = 0;
         }
 
         private void OnClosePosition(PositionClosedEventArgs args)
@@ -200,6 +203,12 @@ namespace cAlgo
         private double GetAbsoluteStopLoss(Position position, double stopLossInPips)
         {
             return position.TradeType == TradeType.Buy ? position.EntryPrice - Symbol.PipSize * stopLossInPips : position.EntryPrice + Symbol.PipSize * stopLossInPips;
+        }
+
+        private void CloseAllPositions()
+        {
+            foreach (var position in Positions.FindAll(label, Symbol))
+                ClosePosition(position);
         }
     }
 }
