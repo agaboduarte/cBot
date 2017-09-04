@@ -44,20 +44,20 @@ namespace cAlgo
         [Parameter("Quantity (Lots)", DefaultValue = 0.15, MinValue = 0.01, Step = 0.01)]
         public double Lots { get; set; }
 
-        [Parameter("Stop Loss Pips", DefaultValue = 45, MinValue = 1, Step = 0.01)]
+        [Parameter("Stop Loss Pips", DefaultValue = 35, MinValue = 1, Step = 0.01)]
         public double StopLossPips { get; set; }
 
-        [Parameter("Movable Stop Loss Pips", DefaultValue = 0.5, MinValue = 0, Step = 0.01)]
-        public double MovableStopLossPips { get; set; }
+        [Parameter("Movable Stop Loss", DefaultValue = false)]
+        public bool MovableStopLoss { get; set; }
 
-        [Parameter("Take Profit Pips", DefaultValue = 0, MinValue = 0, Step = 0.01)]
+        [Parameter("Take Profit Pips", DefaultValue = 135, MinValue = 0, Step = 0.01)]
         public double TakeProfitPips { get; set; }
 
         [Parameter("Max Stop Loss Per Day ($)", DefaultValue = 200, MinValue = 0, Step = 10.0)]
         public double MaxStopLossPerDay { get; set; }
 
-        [Parameter("Use Martingale", DefaultValue = false)]
-        public bool UseMartingale { get; set; }
+        [Parameter("Martingale", DefaultValue = false)]
+        public bool Martingale { get; set; }
 
         private bool RisingSignal
         {
@@ -82,11 +82,6 @@ namespace cAlgo
         private bool CanOpenOrder
         {
             get { return !RiskTime && lastTime.Date == Time.Date && (MaxStopLossPerDay == 0 || totalStopLossToday < MaxStopLossPerDay); }
-        }
-
-        private bool IsMovableStopLoss
-        {
-            get { return MovableStopLossPips > 0; }
         }
 
         protected override void OnStart()
@@ -154,7 +149,7 @@ namespace cAlgo
 
         private TradeResult CreateOrder(TradeType type, long volume)
         {
-            if (IsMovableStopLoss)
+            if (MovableStopLoss)
                 return ExecuteMarketOrder(type, Symbol, volume, label, StopLossPips, null);
 
             return ExecuteMarketOrder(type, Symbol, volume, label, StopLossPips, TakeProfitPips);
@@ -174,7 +169,7 @@ namespace cAlgo
 
             var setStopLoss = GetAbsoluteStopLoss(position, StopLossPips);
 
-            if (IsMovableStopLoss)
+            if (MovableStopLoss)
                 setStopLoss = GetAbsoluteStopLoss(position, StopLossPips - movableStopLossLastPips);
 
             if (position.StopLoss != setStopLoss)
@@ -195,7 +190,7 @@ namespace cAlgo
             {
                 totalStopLossToday += Math.Abs(position.GrossProfit);
 
-                if (UseMartingale)
+                if (Martingale)
                     martingaleMultiplication++;
             }
             else
