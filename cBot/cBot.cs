@@ -143,16 +143,16 @@ namespace cAlgo
             {
                 if (RisingSignal && buyPosition == null)
                 {
-                    foreach (var position in Positions.FindAll(label, Symbol, TradeType.Sell))
-                        ClosePosition(position);
+                    //foreach (var position in Positions.FindAll(label, Symbol, TradeType.Sell))
+                    //    ClosePosition(position);
 
                     tradeResult = CreateOrder(TradeType.Buy, volume);
                 }
 
                 if (FallingSignal && sellPosition == null)
                 {
-                    foreach (var position in Positions.FindAll(label, Symbol, TradeType.Buy))
-                        ClosePosition(position);
+                    //foreach (var position in Positions.FindAll(label, Symbol, TradeType.Buy))
+                    //    ClosePosition(position);
 
                     tradeResult = CreateOrder(TradeType.Sell, volume);
                 }
