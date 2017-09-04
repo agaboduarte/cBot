@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
 VisualStudioVersion = 15.0.26730.12
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "cBot", "cBot\cBot.csproj", "{32FBD1DF-4635-4F16-9287-3CF4F9EB6280}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "cBot.v17", "cBot\cBot.v17.csproj", "{335DF4DC-3E32-4D68-868C-F38A14C64729}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -11,15 +11,15 @@ Global
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{32FBD1DF-4635-4F16-9287-3CF4F9EB6280}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{32FBD1DF-4635-4F16-9287-3CF4F9EB6280}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{32FBD1DF-4635-4F16-9287-3CF4F9EB6280}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{32FBD1DF-4635-4F16-9287-3CF4F9EB6280}.Release|Any CPU.Build.0 = Release|Any CPU
+		{335DF4DC-3E32-4D68-868C-F38A14C64729}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{335DF4DC-3E32-4D68-868C-F38A14C64729}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{335DF4DC-3E32-4D68-868C-F38A14C64729}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{335DF4DC-3E32-4D68-868C-F38A14C64729}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
-		SolutionGuid = {890A0EA4-49CD-406B-A76A-77A7F7049FD7}
+		SolutionGuid = {115799B5-277F-4A93-B6F7-70F9C871085B}
 	EndGlobalSection
 EndGlobal
