@@ -1,17 +1,4 @@
-﻿// -------------------------------------------------------------------------------------------------
-//
-//    This code is a cAlgo API sample.
-//
-//    This cBot is intended to be used as a sample and does not guarantee any particular outcome or
-//    profit of any kind. Use it at your own risk.
-//
-//    The "Sample Trend cBot" will buy when fast period moving average crosses the slow period moving average and sell when 
-//    the fast period moving average crosses the slow period moving average. The orders are closed when an opposite signal 
-//    is generated. There can only by one Buy or Sell order at any time.
-//
-// -------------------------------------------------------------------------------------------------
-
-using System;
+﻿using System;
 using System.Linq;
 using cAlgo.API;
 using cAlgo.API.Indicators;
@@ -23,6 +10,7 @@ namespace cAlgo
     [Robot(TimeZone = TimeZones.UTC, AccessRights = AccessRights.None)]
     public class cBot : Robot
     {
+        private SimpleMovingAverage simpleMovingAverage;
         private RelativeStrengthIndex relativeStrengthIndex;
         private const string label = "trend-cBot";
         private double totalStopLossToday = 0;
@@ -35,10 +23,13 @@ namespace cAlgo
         [Parameter("Periods", DefaultValue = 14, MinValue = 1, Step = 1)]
         public int Periods { get; set; }
 
-        [Parameter("High Ceil", DefaultValue = 80, MinValue = 0, MaxValue = 100, Step = 1)]
+        [Parameter("Crossing Periods", DefaultValue = 3, MinValue = 1)]
+        public int CrossingPeriods { get; set; }
+
+        [Parameter("High Ceil", DefaultValue = 70, MinValue = 1, MaxValue = 100, Step = 1)]
         public int HighCeil { get; set; }
 
-        [Parameter("Low Ceil", DefaultValue = 20, MinValue = 0, MaxValue = 100, Step = 1)]
+        [Parameter("Low Ceil", DefaultValue = 30, MinValue = 1, MaxValue = 100, Step = 1)]
         public int LowCeil { get; set; }
 
         [Parameter("Quantity (Lots)", DefaultValue = 0.15, MinValue = 0.01, Step = 0.01)]
@@ -50,11 +41,17 @@ namespace cAlgo
         [Parameter("Trailing Stop", DefaultValue = false)]
         public bool TrailingStopLoss { get; set; }
 
-        [Parameter("Take Profit Pips", DefaultValue = 135, MinValue = 0, Step = 0.01)]
-        public double TakeProfitPips { get; set; }
+        [Parameter("Take Profit Pips", DefaultValue = 135, MinValue = 0)]
+        public int TakeProfitPips { get; set; }
 
-        [Parameter("Max Stop Loss Per Day ($)", DefaultValue = 200, MinValue = 0, Step = 10.0)]
+        [Parameter("Max Stop Loss Per Day ($)", DefaultValue = 0, MinValue = 0, Step = 10.0)]
         public double MaxStopLossPerDay { get; set; }
+
+        [Parameter("Buy Enabled", DefaultValue = true)]
+        public bool BuyEnabled { get; set; }
+
+        [Parameter("Sell Enabled", DefaultValue = true)]
+        public bool SellEnabled { get; set; }
 
         [Parameter("Martingale", DefaultValue = false)]
         public bool Martingale { get; set; }
@@ -63,9 +60,31 @@ namespace cAlgo
         {
             get
             {
-                var rsi = relativeStrengthIndex;
+                if (!BuyEnabled)
+                    return false;
 
-                return rsi.Result.Last(1) < LowCeil && rsi.Result.IsRising() && rsi.Result.Sum(Periods) / Periods > LowCeil;
+                var sma = simpleMovingAverage;
+                var belowCeiling = false;
+
+                for (var i = 0; i < CrossingPeriods; i++)
+                {
+                    if (relativeStrengthIndex.Result.Last(i) < LowCeil)
+                    {
+                        belowCeiling = true;
+                        break;
+                    }
+                }
+
+                if (!belowCeiling)
+                    return false;
+
+                for (var i = 0; i < CrossingPeriods; i++)
+                {
+                    if (sma.Result.Last(i) < MarketSeries.Close.Last(i))
+                        return true;
+                }
+
+                return false;
             }
         }
 
@@ -73,9 +92,31 @@ namespace cAlgo
         {
             get
             {
-                var rsi = relativeStrengthIndex;
+                if (!SellEnabled)
+                    return false;
 
-                return rsi.Result.Last(1) > HighCeil && rsi.Result.IsFalling() && rsi.Result.Sum(Periods) / Periods < HighCeil;
+                var sma = simpleMovingAverage;
+                var aboveCeiling = false;
+
+                for (var i = 0; i < CrossingPeriods; i++)
+                {
+                    if (relativeStrengthIndex.Result.Last(i) > HighCeil)
+                    {
+                        aboveCeiling = true;
+                        break;
+                    }
+                }
+
+                if (!aboveCeiling)
+                    return false;
+
+                for (var i = 0; i < CrossingPeriods; i++)
+                {
+                    if (sma.Result.Last(i) > MarketSeries.Close.Last(i))
+                        return true;
+                }
+
+                return false;
             }
         }
 
@@ -91,13 +132,14 @@ namespace cAlgo
 
         private bool CanOpenOrder
         {
-            get { return !RiskTime && lastTime.Date == Time.Date && (MaxStopLossPerDay == 0 || totalStopLossToday < MaxStopLossPerDay); }
+            get { return !RiskTime && lastTime.Date == Time.Date && (MaxStopLossPerDay == 0 || totalStopLossToday < MaxStopLossPerDay) && Positions.FindAll(label, Symbol).Length == 0; }
         }
 
         protected override void OnStart()
         {
             Positions.Closed += OnClosePosition;
 
+            simpleMovingAverage = Indicators.SimpleMovingAverage(MarketSeries.Close, Periods);
             relativeStrengthIndex = Indicators.RelativeStrengthIndex(MarketSeries.Close, Periods);
         }
 
@@ -127,7 +169,7 @@ namespace cAlgo
             var sellPosition = Positions.Find(label, Symbol, TradeType.Sell);
             var volume = QuantityVolumeInUnits * martingaleMultiplication;
 
-            if (CanOpenOrder && tradeResult == null)
+            if (CanOpenOrder)
             {
                 if (BuySignal && buyPosition == null)
                 {
