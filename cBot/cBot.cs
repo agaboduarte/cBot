@@ -60,9 +60,6 @@ namespace cAlgo
         {
             get
             {
-                if (!BuyEnabled)
-                    return false;
-
                 var sma = simpleMovingAverage;
                 var belowCeiling = false;
 
@@ -92,9 +89,6 @@ namespace cAlgo
         {
             get
             {
-                if (!SellEnabled)
-                    return false;
-
                 var sma = simpleMovingAverage;
                 var aboveCeiling = false;
 
@@ -175,14 +169,16 @@ namespace cAlgo
                 {
                     CloseAllPositions();
 
-                    tradeResult = CreateOrder(TradeType.Buy, volume);
+                    if (BuyEnabled)
+                        tradeResult = CreateOrder(TradeType.Buy, volume);
                 }
 
                 if (SellSignal && sellPosition == null)
                 {
                     CloseAllPositions();
 
-                    tradeResult = CreateOrder(TradeType.Sell, volume);
+                    if (SellEnabled)
+                        tradeResult = CreateOrder(TradeType.Sell, volume);
                 }
             }
 
