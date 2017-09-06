@@ -23,3 +23,6 @@ Global
 		SolutionGuid = {890A0EA4-49CD-406B-A76A-77A7F7049FD7}
 	EndGlobalSection
 EndGlobal
+
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Renko", "..\..\Indicators\Renko\Renko\Renko.csproj", "{285A7C2A-78A2-4F72-B8A3-3A3950B8B0B6}"
+EndProject

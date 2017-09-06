@@ -10,8 +10,6 @@ namespace cAlgo
     [Robot(TimeZone = TimeZones.UTC, AccessRights = AccessRights.None)]
     public class cBot : Robot
     {
-        private SimpleMovingAverage simpleMovingAverage;
-        private RelativeStrengthIndex relativeStrengthIndex;
         private const string label = "trend-cBot";
         private double totalStopLossToday = 0;
         private DateTime lastTime;
@@ -19,18 +17,6 @@ namespace cAlgo
         private int martingaleMultiplication = 1;
         private double movableStopLossLastPips = 0;
         private double movableStopLossForwardPips = 0;
-
-        [Parameter("Periods", DefaultValue = 14, MinValue = 1, Step = 1)]
-        public int Periods { get; set; }
-
-        [Parameter("Crossing Periods", DefaultValue = 3, MinValue = 1)]
-        public int CrossingPeriods { get; set; }
-
-        [Parameter("High Ceil", DefaultValue = 70, MinValue = 1, MaxValue = 100, Step = 1)]
-        public int HighCeil { get; set; }
-
-        [Parameter("Low Ceil", DefaultValue = 30, MinValue = 1, MaxValue = 100, Step = 1)]
-        public int LowCeil { get; set; }
 
         [Parameter("Quantity (Lots)", DefaultValue = 0.15, MinValue = 0.01, Step = 0.01)]
         public double Lots { get; set; }
@@ -58,60 +44,12 @@ namespace cAlgo
 
         private bool BuySignal
         {
-            get
-            {
-                var sma = simpleMovingAverage;
-                var belowCeiling = false;
-
-                for (var i = 0; i < CrossingPeriods; i++)
-                {
-                    if (relativeStrengthIndex.Result.Last(i) < LowCeil)
-                    {
-                        belowCeiling = true;
-                        break;
-                    }
-                }
-
-                if (!belowCeiling)
-                    return false;
-
-                for (var i = 0; i < CrossingPeriods; i++)
-                {
-                    if (sma.Result.Last(i) < MarketSeries.Close.Last(i))
-                        return true;
-                }
-
-                return false;
-            }
+            get { return Symbol.Bid <= MarketSeries.Low.Minimum(5000); }
         }
 
         private bool SellSignal
         {
-            get
-            {
-                var sma = simpleMovingAverage;
-                var aboveCeiling = false;
-
-                for (var i = 0; i < CrossingPeriods; i++)
-                {
-                    if (relativeStrengthIndex.Result.Last(i) > HighCeil)
-                    {
-                        aboveCeiling = true;
-                        break;
-                    }
-                }
-
-                if (!aboveCeiling)
-                    return false;
-
-                for (var i = 0; i < CrossingPeriods; i++)
-                {
-                    if (sma.Result.Last(i) > MarketSeries.Close.Last(i))
-                        return true;
-                }
-
-                return false;
-            }
+            get { return Symbol.Ask >= MarketSeries.High.Maximum(5000); }
         }
 
         private long QuantityVolumeInUnits
@@ -132,9 +70,6 @@ namespace cAlgo
         protected override void OnStart()
         {
             Positions.Closed += OnClosePosition;
-
-            simpleMovingAverage = Indicators.SimpleMovingAverage(MarketSeries.Close, Periods);
-            relativeStrengthIndex = Indicators.RelativeStrengthIndex(MarketSeries.Close, Periods);
         }
 
         protected override void OnTick()

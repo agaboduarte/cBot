@@ -55,4 +55,10 @@
   <Target Name="AfterBuild">
   </Target>
   -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\Indicators\Renko\Renko\Renko.csproj">
+      <Project>{285A7C2A-78A2-4F72-B8A3-3A3950B8B0B6}</Project>
+      <Name>Renko</Name>
+    </ProjectReference>
+  </ItemGroup>
 </Project>
