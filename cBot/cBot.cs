@@ -13,10 +13,28 @@ namespace cAlgo
         private const string label = "trend-cBot";
         private double totalStopLossToday = 0;
         private DateTime lastTime;
-        private TimeSpan fridayCloseAllOrdersUpTo = new TimeSpan(20, 0, 0);
-        private int martingaleMultiplication = 1;
-        private double movableStopLossLastPips = 0;
-        private double movableStopLossForwardPips = 0;
+        private TimeSpan fridayCloseAllOrdersUpTo = new TimeSpan(19, 0, 0);
+        private double lastProfitPips = 0;
+        private MovingAverage longAverage;
+        private MovingAverage shortAverage;
+        private RelativeStrengthIndex relativeStrengthIndex;
+        private BollingerBands bollingerBands;
+        private TradeVolumeIndex tradeVolumeIndex;
+
+        [Parameter("Bollinger Periods", DefaultValue = 21, MinValue = 1, Step = 1)]
+        public int BollingerPeriods { get; set; }
+
+        [Parameter("Long Periods", DefaultValue = 21, MinValue = 1, Step = 1)]
+        public int LongPeriods { get; set; }
+
+        [Parameter("Short Periods", DefaultValue = 14, MinValue = 1, Step = 1)]
+        public int ShortPeriods { get; set; }
+
+        [Parameter("Average Distance Long/Short Pips", DefaultValue = 3.5, MinValue = 0, Step = 0.1)]
+        public double AverageDistanceLongShortPips { get; set; }
+
+        [Parameter("Difference High/Low Pips", DefaultValue = 3.5, MinValue = 0.01, Step = 0.1)]
+        public double DifferenceHighLowPips { get; set; }
 
         [Parameter("Quantity (Lots)", DefaultValue = 0.15, MinValue = 0.01, Step = 0.01)]
         public double Lots { get; set; }
@@ -30,6 +48,9 @@ namespace cAlgo
         [Parameter("Take Profit Pips", DefaultValue = 135, MinValue = 0)]
         public int TakeProfitPips { get; set; }
 
+        // [Parameter("Breakeven On Profit Pips", DefaultValue = 10, MinValue = 0)]
+        public int BreakevenOnProfitPips { get; set; }
+
         [Parameter("Max Stop Loss Per Day ($)", DefaultValue = 0, MinValue = 0, Step = 10.0)]
         public double MaxStopLossPerDay { get; set; }
 
@@ -39,17 +60,50 @@ namespace cAlgo
         [Parameter("Sell Enabled", DefaultValue = true)]
         public bool SellEnabled { get; set; }
 
-        [Parameter("Martingale", DefaultValue = false)]
-        public bool Martingale { get; set; }
-
         private bool BuySignal
         {
-            get { return Symbol.Bid <= MarketSeries.Low.Minimum(5000); }
+            get
+            {
+                if (Math.Abs(MarketSeries.Open.Last(1) - MarketSeries.Close.Last(1)) / Symbol.PipSize > DifferenceHighLowPips)
+                    return false;
+
+                var averageShortPrice = shortAverage.Result.Sum(ShortPeriods) / ShortPeriods;
+                var averageLongPrice = longAverage.Result.Sum(ShortPeriods) / ShortPeriods;
+
+                if (Math.Abs(averageShortPrice - averageLongPrice) / Symbol.PipSize < AverageDistanceLongShortPips)
+                    return false;
+
+                if (MarketSeries.Close.Last(1) >= bollingerBands.Main.Last(1))
+                    return false;
+
+                if (!shortAverage.Result.IsRising())
+                    return false;
+
+                return shortAverage.Result.HasCrossedAbove(longAverage.Result, 1);
+            }
         }
 
         private bool SellSignal
         {
-            get { return Symbol.Ask >= MarketSeries.High.Maximum(5000); }
+            get
+            {
+                if (Math.Abs(MarketSeries.Open.Last(1) - MarketSeries.Close.Last(1)) / Symbol.PipSize > DifferenceHighLowPips)
+                    return false;
+
+                var averageShortPrice = shortAverage.Result.Sum(ShortPeriods) / ShortPeriods;
+                var averageLongPrice = longAverage.Result.Sum(ShortPeriods) / ShortPeriods;
+
+                if (Math.Abs(averageShortPrice - averageLongPrice) / Symbol.PipSize < AverageDistanceLongShortPips)
+                    return false;
+
+                if (MarketSeries.Close.Last(1) <= bollingerBands.Main.Last(1))
+                    return false;
+
+                if (!shortAverage.Result.IsFalling())
+                    return false;
+
+                return shortAverage.Result.HasCrossedBelow(longAverage.Result, 1);
+            }
         }
 
         private long QuantityVolumeInUnits
@@ -70,6 +124,13 @@ namespace cAlgo
         protected override void OnStart()
         {
             Positions.Closed += OnClosePosition;
+
+            longAverage = Indicators.ExponentialMovingAverage(MarketSeries.Close, LongPeriods);
+            shortAverage = Indicators.ExponentialMovingAverage(MarketSeries.Close, ShortPeriods);
+            bollingerBands = Indicators.BollingerBands(MarketSeries.Close, BollingerPeriods, 2, MovingAverageType.Exponential);
+            tradeVolumeIndex = Indicators.TradeVolumeIndex(MarketSeries.Close);
+
+            base.OnStart();
         }
 
         protected override void OnTick()
@@ -83,6 +144,8 @@ namespace cAlgo
             ClosingOrdersIfNecessary();
             CreateOrders();
             ModifyOpenPosition();
+
+            base.OnTick();
         }
 
         private void ClosingOrdersIfNecessary()
@@ -96,29 +159,24 @@ namespace cAlgo
             var tradeResult = default(TradeResult);
             var buyPosition = Positions.Find(label, Symbol, TradeType.Buy);
             var sellPosition = Positions.Find(label, Symbol, TradeType.Sell);
-            var volume = QuantityVolumeInUnits * martingaleMultiplication;
+
+            if (BuySignal && sellPosition != null)
+                ClosePosition(sellPosition);
+
+            if (SellSignal && buyPosition != null)
+                ClosePosition(buyPosition);
 
             if (CanOpenOrder)
             {
-                if (BuySignal && buyPosition == null)
-                {
-                    CloseAllPositions();
+                if (BuySignal && BuyEnabled)
+                    tradeResult = CreateOrder(TradeType.Buy, QuantityVolumeInUnits);
 
-                    if (BuyEnabled)
-                        tradeResult = CreateOrder(TradeType.Buy, volume);
-                }
-
-                if (SellSignal && sellPosition == null)
-                {
-                    CloseAllPositions();
-
-                    if (SellEnabled)
-                        tradeResult = CreateOrder(TradeType.Sell, volume);
-                }
+                if (SellSignal && SellEnabled)
+                    tradeResult = CreateOrder(TradeType.Sell, QuantityVolumeInUnits);
             }
 
             if (tradeResult != null)
-                movableStopLossLastPips = 0;
+                lastProfitPips = 0;
 
             return tradeResult;
         }
@@ -129,9 +187,6 @@ namespace cAlgo
 
             if (position != null)
                 return null;
-
-            if (TrailingStopLoss)
-                return ExecuteMarketOrder(type, Symbol, volume, label, StopLossPips, null);
 
             return ExecuteMarketOrder(type, Symbol, volume, label, StopLossPips, TakeProfitPips);
         }
@@ -145,13 +200,44 @@ namespace cAlgo
             if (position == null)
                 return;
 
-            if (position.Pips > movableStopLossLastPips)
-                movableStopLossLastPips = position.Pips;
+            if (position.Pips > lastProfitPips)
+                lastProfitPips = position.Pips;
 
-            var setStopLoss = GetAbsoluteStopLoss(position, StopLossPips);
+            var setStopLoss = position.StopLoss;
 
             if (TrailingStopLoss)
-                setStopLoss = GetAbsoluteStopLoss(position, StopLossPips - movableStopLossLastPips);
+                setStopLoss = GetAbsoluteStopLoss(position, StopLossPips - lastProfitPips);
+
+            if (position.StopLoss != setStopLoss)
+                ModifyPosition(position, setStopLoss, position.TakeProfit);
+        }
+
+        private void ModifyOpenPosition2()
+        {
+            var buyPosition = Positions.Find(label, Symbol, TradeType.Buy);
+            var sellPosition = Positions.Find(label, Symbol, TradeType.Sell);
+            var position = buyPosition ?? sellPosition;
+
+            if (position == null)
+                return;
+
+            var stopLossInProfitZone = position.TradeType == TradeType.Buy ? position.StopLoss > position.EntryPrice : position.StopLoss < position.EntryPrice;
+            var setStopLoss = position.StopLoss.Value;
+            var slideStop = position.Pips > lastProfitPips;
+            var slidePips = slideStop ? position.Pips - lastProfitPips : 0;
+
+            if (BreakevenOnProfitPips > 0 && position.Pips >= BreakevenOnProfitPips && !stopLossInProfitZone)
+            {
+                setStopLoss = position.EntryPrice;
+                slidePips -= BreakevenOnProfitPips;
+            }
+
+            if (TrailingStopLoss)
+            {
+                lastProfitPips = position.Pips;
+
+                setStopLoss = Math.Round(position.TradeType == TradeType.Buy ? setStopLoss + Symbol.PipSize * slidePips : setStopLoss - Symbol.PipSize * slidePips, Symbol.Digits);
+            }
 
             if (position.StopLoss != setStopLoss)
                 ModifyPosition(position, setStopLoss, position.TakeProfit);
@@ -163,14 +249,7 @@ namespace cAlgo
             var stopLoss = position.GrossProfit < 0;
 
             if (stopLoss)
-            {
                 totalStopLossToday += Math.Abs(position.GrossProfit);
-
-                if (Martingale)
-                    martingaleMultiplication++;
-            }
-            else
-                martingaleMultiplication = 1;
         }
 
         private double GetAbsoluteStopLoss(Position position, double stopLossInPips)

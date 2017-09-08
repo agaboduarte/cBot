@@ -1,10 +1,11 @@
-﻿
+
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 15
-VisualStudioVersion = 15.0.26730.12
+# Visual Studio 2013
+VisualStudioVersion = 12.0.40629.0
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "cBot", "cBot\cBot.csproj", "{32FBD1DF-4635-4F16-9287-3CF4F9EB6280}"
 EndProject
+
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -23,6 +24,3 @@ Global
 		SolutionGuid = {890A0EA4-49CD-406B-A76A-77A7F7049FD7}
 	EndGlobalSection
 EndGlobal
-
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Renko", "..\..\Indicators\Renko\Renko\Renko.csproj", "{285A7C2A-78A2-4F72-B8A3-3A3950B8B0B6}"
-EndProject
